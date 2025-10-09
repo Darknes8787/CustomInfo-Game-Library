@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T17:52:04.403094Z_
+_Generated: 2025-10-09T19:58:50.894361Z_
 
 ## Table of contents
 
@@ -5141,20 +5141,188 @@ function loadTheme(){
 }
 
 /* ==========================
-   SETTINGS
+   SETTINGS (binding live unificato)
 ========================== */
+
+// Mappa centralizzata: idControllo -> { path, type, toUI?, fromUI? }
+const SETTINGS_MAP = {
+  // LIBRERIA
+  'default-lib':     { path: 'library.default_folder',   type: 'string' },
+  'scan-on-start':   { path: 'library.scan_on_startup',  type: 'boolean' },
+  'scan-depth':      { path: 'library.max_depth',        type: 'number' },
+  'dedupe-titles':   { path: 'library.dedupe_titles',    type: 'boolean' },
+
+  // LOG
+  'logs-keep':       { path: 'logs.keep_last',           type: 'number' },
+  'logs-autosave':   { path: 'logs.auto_save_after_scan',type: 'boolean' },
+
+  // UI / SCAN
+  'ui-progress':     { path: 'scan.show_progress',       type: 'boolean' },
+  'theme':           { path: 'ui.theme',                 type: 'string',
+    toUI:  v => (v || 'dark'),
+    fromUI: v => (v || 'dark')
+  },
+
+  // ESCLUSIONI (textarea con “;”)
+  'dir-exclude':     { path: 'exclude.dir_keywords',     type: 'array',
+    toUI:  arr => (Array.isArray(arr) ? arr.join('; ') : ''),
+    fromUI: str => sanitizeList(str)
+  },
+  'file-exclude':    { path: 'exclude.file_keywords',    type: 'array',
+    toUI:  arr => (Array.isArray(arr) ? arr.join('; ') : ''),
+    fromUI: str => sanitizeList(str)
+  },
+  'ext-exclude':     { path: 'exclude.extensions',       type: 'array',
+    toUI:  arr => (Array.isArray(arr) ? arr.join('; ') : ''),
+    fromUI: str => sanitizeList(str, { lower: true, ensureDot: true })
+  },
+
+  // AVANZATE
+  'sevenzip':        { path: 'paths.sevenzip',           type: 'string' },
+  'alias-file':      { path: 'metadata.aliases_path',    type: 'string' },
+};
+
+// Normalizza le liste “a; b; c”
+function sanitizeList(input, opts = {}) {
+  const { lower=false, ensureDot=false } = opts;
+  const out = (input || '')
+    .split(';')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => {
+      let v = lower ? s.toLowerCase() : s;
+      if (ensureDot) {
+        // aggiungi il punto iniziale se manca (per estensioni)
+        if (!v.startsWith('.')) v = '.' + v;
+      }
+      return v;
+    });
+  // dedup preservando ordine
+  return Array.from(new Set(out));
+}
+
+// Helpers di conversione
+function coerceToType(value, type) {
+  switch (type) {
+    case 'boolean': return !!value;
+    case 'number':  return Number.isFinite(+value) ? (+value) : 0;
+    case 'array':   return Array.isArray(value) ? value : [];
+    default:        return (value ?? '');
+  }
+}
+
+async function loadSettingsIntoUI() {
+  try {
+    await waitForPyAPI(1200);
+    const api = py();
+    if (!api?.get_settings) return; // in browser
+    const s = await api.get_settings(); // user.json completo
+
+    // Popola i controlli
+    Object.entries(SETTINGS_MAP).forEach(([id, meta]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      // estrai valore da s usando path a punti
+      const parts = meta.path.split('.');
+      let cur = s;
+      for (const p of parts) cur = (cur && typeof cur === 'object') ? cur[p] : undefined;
+
+      // type-safe + trasformazione toUI
+      const v = meta.toUI ? meta.toUI(cur) : coerceToType(cur, meta.type);
+
+      if (el.type === 'checkbox') el.checked = !!v;
+      else el.value = (v ?? '');
+    });
+
+    // Applica anche il tema
+    const themeSel = document.getElementById('theme');
+    const themeVal = themeSel?.value || 'dark';
+    applyTheme(themeVal);
+
+  } catch (e) {
+    console.warn('loadSettingsIntoUI error', e);
+  }
+}
+
+function bindLiveSaves() {
+  Object.entries(SETTINGS_MAP).forEach(([id, meta]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    const handler = async () => {
+      const api = py();
+      if (!api?.set_setting) return;
+
+      let uiVal;
+      if (el.type === 'checkbox') uiVal = el.checked;
+      else uiVal = el.value;
+
+      // trasformazione fromUI (per textarea, ecc.)
+      if (meta.fromUI) {
+        uiVal = meta.fromUI(uiVal);
+      } else {
+        // coerce leggero ai tipi base (number/bool/string)
+        uiVal = coerceToType(uiVal, meta.type);
+      }
+
+      try {
+        await api.set_setting(meta.path, uiVal);
+        // feedback minimale nel footer (evito spam)
+        // setStatus('Impostazioni aggiornate'); // opzionale
+      } catch (e) {
+        console.error('set_setting failed', meta.path, e);
+        setStatus('Errore salvataggio impostazioni');
+      }
+
+      // caso speciale: tema → applica subito
+      if (meta.path === 'ui.theme') {
+        applyTheme(uiVal || 'dark');
+      }
+    };
+
+    el.addEventListener('change', handler);
+    // per input testuali/textarea puoi voler salvare anche su 'input'
+    if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+      el.addEventListener('blur', handler); // salva quando esci dal campo
+    }
+  });
+}
+
+// Pulsante “Ripristina default” → copia defaults.json su user.json
 $('#restore')?.addEventListener('click', async () => {
-  try { if (py()?.restore_defaults) await py().restore_defaults(); } catch {}
-  applyTheme('dark');
-  setStatus('Impostazioni ripristinate');
+  try {
+    if (py()?.restore_defaults) {
+      await py().restore_defaults();
+      await loadSettingsIntoUI(); // ripopola i campi
+      applyTheme('dark');         // default tema
+    }
+    setStatus('Impostazioni ripristinate');
+    // Banner UX già gestito in ui-utils.js (beginSaving/endSaving se vuoi)
+  } catch {
+    setStatus('Errore nel ripristino delle impostazioni');
+  }
 });
 
+// Pulsante “Salva” (rimane come conferma manuale opzionale)
 $('#save')?.addEventListener('click', async () => {
-  const theme = $('#theme')?.value || 'dark';
-  applyTheme(theme);
-  try { if (py()?.set_setting) await py().set_setting('ui.theme', theme); } catch {}
-  setStatus('Impostazioni salvate');
+  try {
+    // Forziamo almeno il tema (gli altri sono già live)
+    const theme = $('#theme')?.value || 'dark';
+    applyTheme(theme);
+    if (py()?.set_setting) await py().set_setting('ui.theme', theme);
+    setStatus('Impostazioni salvate');
+  } catch {
+    setStatus('Errore salvataggio');
+  }
 });
+
+// Bootstrap settings
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadSettingsIntoUI();
+  bindLiveSaves();
+});
+
 
 /* ==========================
    LIBRERIA: pick folder + scan
@@ -6331,19 +6499,36 @@ if __name__ == "__main__":
 
 ```json
 {
-  "ui": {
-    "theme": "dark",
-    "grid_size": "md"
+  "library": {
+    "folders": [],
+    "default_folder": "",
+    "scan_on_startup": true,
+    "max_depth": 2,
+    "dedupe_titles": true
+  },
+  "scan": {
+    "show_progress": true
+  },
+  "logs": {
+    "keep_last": 10,
+    "auto_save_after_scan": false
+  },
+  "exclude": {
+    "dir_keywords": [],
+    "file_keywords": [],
+    "extensions": []
   },
   "paths": {
-    "libraries": [],
     "sevenzip": "7z"
   },
-  "install": {
-    "silent_7z": true,
-    "hide_windows": true
+  "metadata": {
+    "aliases_path": ""
+  },
+  "ui": {
+    "theme": "dark"
   }
 }
+
 ```
 
 
@@ -6352,55 +6537,62 @@ if __name__ == "__main__":
 
 ```json
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CustomInfo Game Library – Settings",
   "type": "object",
   "properties": {
-    "ui": {
+    "library": {
       "type": "object",
       "properties": {
-        "theme": {
-          "type": "string",
-          "enum": [
-            "dark",
-            "light"
-          ]
-        },
-        "grid_size": {
-          "type": "string",
-          "enum": [
-            "sm",
-            "md",
-            "lg"
-          ]
-        }
+        "folders": { "type": "array", "items": { "type": "string" } },
+        "default_folder": { "type": "string" },
+        "scan_on_startup": { "type": "boolean" },
+        "max_depth": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "dedupe_titles": { "type": "boolean" }
+      }
+    },
+    "scan": {
+      "type": "object",
+      "properties": {
+        "show_progress": { "type": "boolean" }
+      }
+    },
+    "logs": {
+      "type": "object",
+      "properties": {
+        "keep_last": { "type": "integer", "minimum": 0, "maximum": 500 },
+        "auto_save_after_scan": { "type": "boolean" }
+      }
+    },
+    "exclude": {
+      "type": "object",
+      "properties": {
+        "dir_keywords": { "type": "array", "items": { "type": "string" } },
+        "file_keywords": { "type": "array", "items": { "type": "string" } },
+        "extensions": { "type": "array", "items": { "type": "string" } }
       }
     },
     "paths": {
       "type": "object",
       "properties": {
-        "libraries": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "sevenzip": {
-          "type": "string"
-        }
+        "sevenzip": { "type": "string", "description": "Percorso eseguibile 7-Zip (o '7z' nel PATH)" }
       }
     },
-    "install": {
+    "metadata": {
       "type": "object",
       "properties": {
-        "silent_7z": {
-          "type": "boolean"
-        },
-        "hide_windows": {
-          "type": "boolean"
-        }
+        "aliases_path": { "type": "string", "description": "File JSON alias titoli; vuoto = default modulo" }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "theme": { "type": "string", "enum": ["dark", "light"] }
       }
     }
   }
 }
+
 ```
 
 
@@ -6409,17 +6601,33 @@ if __name__ == "__main__":
 
 ```json
 {
-  "ui": {
-    "theme": "dark",
-    "grid_size": "md"
+  "library": {
+    "folders": [],
+    "default_folder": "C:\\Ciruzzo",
+    "scan_on_startup": true,
+    "max_depth": 3,
+    "dedupe_titles": true
+  },
+  "scan": {
+    "show_progress": false
+  },
+  "logs": {
+    "keep_last": 10,
+    "auto_save_after_scan": true
+  },
+  "exclude": {
+    "dir_keywords": [],
+    "file_keywords": [],
+    "extensions": []
   },
   "paths": {
-    "libraries": [],
     "sevenzip": "7z"
   },
-  "install": {
-    "silent_7z": true,
-    "hide_windows": true
+  "metadata": {
+    "aliases_path": ""
+  },
+  "ui": {
+    "theme": "dark"
   }
 }
 ```
