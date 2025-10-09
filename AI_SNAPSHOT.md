@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T20:17:01.812580Z_
+_Generated: 2025-10-09T20:20:01.817175Z_
 
 ## Table of contents
 
@@ -5268,6 +5268,10 @@ function bindLiveSaves() {
 
       try {
         await api.set_setting(meta.path, uiVal);
+
+        // >>> segnala al dirty-tracker che questo controllo è "salvato"
+        document.dispatchEvent(new CustomEvent('settings:saved', { detail: { control: el } }));
+              
         // feedback minimale nel footer (evito spam)
         // setStatus('Impostazioni aggiornate'); // opzionale
       } catch (e) {
@@ -6013,6 +6017,37 @@ function initDirtyTracker() {
                                       : (ctrl.value !== orig);
   };
 
+  // >>> API: "committa" il valore corrente come baseline originale
+  function commitControlBaseline(ctrl) {
+    if (!ctrl) return;
+    // aggiorna baseline
+    originals.set(ctrl, (ctrl.type === 'checkbox') ? ctrl.checked : ctrl.value);
+    // rimuovi eventuale pulsante reset del campo
+    removeResetButton(ctrl);
+    // ricalcola dirty della riga/tab/banner
+    const row = ctrl.closest('.settings-row');
+    if (row) row.classList.toggle('dirty', computeRowDirty(row));
+    updateDraftVisibility();
+  }
+
+  function commitAllBaselines(root = settings) {
+    const controls = $$('input, select, textarea', root);
+    controls.forEach(c => commitControlBaseline(c));
+  }
+
+  // Espongo una piccola API globale per integrazioni (es. salvataggi live)
+  window.SettingsDirty = {
+    commitControlBaseline,
+    commitAllBaselines,
+    refresh: updateDraftVisibility
+  };
+
+  // Listener generico: quando l’app segnala "settings:saved", committa il controllo
+  document.addEventListener('settings:saved', (e) => {
+    const ctrl = e?.detail?.control || null;
+    if (ctrl) commitControlBaseline(ctrl);
+  });
+
   const computeRowDirty = (row) => {
     const controls = $$('input, select, textarea', row);
     return controls.some(isControlChanged);
@@ -6294,12 +6329,20 @@ function initDirtyTracker() {
     }
     say('Salvataggio in corso');
   }
+
   function endSaving() {
     const settings = $(SEL.settingsView);
     if (!settings) return;
-    // azzera dirty
+
+    // >>> committa tutti i controlli come baseline (post-salvataggio)
+    if (window.SettingsDirty?.commitAllBaselines) {
+      window.SettingsDirty.commitAllBaselines(settings);
+    }
+
+    // azzera dirty (ridondante ma rende l’UX immediata)
     $$('.settings-row.dirty', settings).forEach(r => r.classList.remove('dirty'));
     $$('.tab-nav label.tab-dirty', settings).forEach(l => l.classList.remove('tab-dirty'));
+
     const info = $('.draft-info', $(SEL.draftMount, settings));
     if (info) {
       info.innerHTML = `<span class="dot"></span> Impostazioni salvate`;
