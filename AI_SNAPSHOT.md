@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T20:41:01.813455Z_
+_Generated: 2025-10-09T20:44:01.818233Z_
 
 ## Table of contents
 
@@ -6675,7 +6675,7 @@ if __name__ == "__main__":
     "folders": [],
     "default_folder": "",
     "scan_on_startup": false,
-    "max_depth": 11,
+    "max_depth": 19,
     "dedupe_titles": false
   },
   "scan": {
