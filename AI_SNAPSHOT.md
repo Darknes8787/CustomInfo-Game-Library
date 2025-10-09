@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T21:11:01.814840Z_
+_Generated: 2025-10-09T21:14:01.855220Z_
 
 ## Table of contents
 
@@ -2271,8 +2271,8 @@ class LibraryService:
 <a name="F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicessettingsstorepy"></a>
 
 ```python
-import time
-import os, json, shutil, time, tempfile
+
+import json, shutil, os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]  # points to /app
@@ -2291,103 +2291,25 @@ class SettingsStore:
         if not USER.exists() and DEFAULTS.exists():
             shutil.copy(DEFAULTS, USER)
 
-    def _read_json_safe(self, path: Path):
-        """
-        Legge JSON in modo sicuro.
-        Se vuoto/non valido: ritorna None.
-        """
-        try:
-            txt = path.read_text(encoding="utf-8")
-            if not txt.strip():
-                return None
-            return json.loads(txt)
-        except Exception:
-            return None
-
-    def _load_defaults(self):
-        data = self._read_json_safe(DEFAULTS) or {}
-        return data
-
     def get_user_settings(self):
-        data = self._read_json_safe(USER)
-        if data is None:
-            # user.json corrotto o vuoto → ripristina dai defaults
-            data = self._load_defaults()
-            try:
-                USER.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            except Exception:
-                pass
-        return data
-
-    def _atomic_write(self, path: Path, payload: dict):
-        """
-        Scrittura atomica robusta su Windows:
-        - crea un tmp file UNICO nello stesso folder
-        - retry su open/write e su replace (file lock/antivirus)
-        """
-        path.parent.mkdir(parents=True, exist_ok=True)
-        content = json.dumps(payload, indent=2, ensure_ascii=False)
-    
-        # 1) crea tmp unico
-        tmp_path = None
-        for attempt in range(3):
-          try:
-            with tempfile.NamedTemporaryFile(
-                mode="w", encoding="utf-8", delete=False,
-                dir=str(path.parent), prefix=path.stem + ".", suffix=".tmp"
-            ) as tf:
-              tf.write(content)
-              tmp_path = Path(tf.name)
-            break
-          except PermissionError:
-            time.sleep(0.15 * (attempt + 1))
-        if tmp_path is None:
-          # fallback estremo
-          path.write_text(content, encoding="utf-8")
-          return
-    
-        # 2) replace con retry
-        for attempt in range(5):
-          try:
-            os.replace(str(tmp_path), str(path))
-            return
-          except PermissionError:
-            time.sleep(0.2 * (attempt + 1))
-          except Exception:
-            break
-        
-        # 3) fallback: scrittura diretta (evita crash)
-        try:
-          path.write_text(content, encoding="utf-8")
-        finally:
-          try:
-            if tmp_path.exists():
-              tmp_path.unlink(missing_ok=True)
-          except Exception:
-            pass
-
+        return json.loads(USER.read_text(encoding="utf-8"))
 
     def set_setting(self, path, value):
         # path es: "ui.theme" oppure "install.silent_7z"
-        data = self.get_user_settings()  # già robusto
+        data = self.get_user_settings()
         keys = path.split(".")
         ref = data
         for k in keys[:-1]:
             ref = ref.setdefault(k, {})
         ref[keys[-1]] = value
-
-        # scrittura atomica
-        self._atomic_write(USER, data)
-
+        USER.write_text(json.dumps(data, indent=2), encoding="utf-8")
         self.events.emit("settings/changed", {"path": path, "value": value})
         return True
 
     def restore_defaults(self):
-        defaults = self._load_defaults()
-        self._atomic_write(USER, defaults)
+        shutil.copy(DEFAULTS, USER)
         self.events.emit("settings/restored", self.get_user_settings())
         return True
-
 ```
 
 
@@ -3638,23 +3560,6 @@ box-shadow:0 0 12px rgba(111, 77, 239, 0.25), inset 0 0 4px rgba(111, 77, 239, 0
     0 0 0 1px color-mix(in srgb, var(--accent) var(--mk-ring), transparent),
     0 0 8px -2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
-
-
-
-
-
-
-
-
-
-/* opzionale: stesso stile della vecchia draft-info */
-.settings-actions .save-info {
-  display: none;
-  align-items: center;
-  gap: .5rem;
-}
-
-/* già usi .loader-dot per l’animazione puntini */
 
 ```
 
@@ -5237,169 +5142,20 @@ function loadTheme(){
 }
 
 /* ==========================
-   SETTINGS (no-live, solo salvataggio manuale)
+   SETTINGS
 ========================== */
-
-// Mappa controlli -> path config
-const SETTINGS_MAP = {
-  // LIBRERIA
-  'default-lib':     { path: 'library.default_folder',   type: 'string' },
-  'scan-on-start':   { path: 'library.scan_on_startup',  type: 'boolean' },
-  'scan-depth':      { path: 'library.max_depth',        type: 'number' },
-  'dedupe-titles':   { path: 'library.dedupe_titles',    type: 'boolean' },
-
-  // LOG
-  'logs-keep':       { path: 'logs.keep_last',           type: 'number' },
-  'logs-autosave':   { path: 'logs.auto_save_after_scan',type: 'boolean' },
-
-  // UI / SCAN
-  'ui-progress':     { path: 'scan.show_progress',       type: 'boolean' },
-  'theme':           { path: 'ui.theme',                 type: 'string',
-    toUI:  v => (v || 'dark'),
-    fromUI: v => (v || 'dark')
-  },
-
-  // ESCLUSIONI (textarea “;”)
-  'dir-exclude':     { path: 'exclude.dir_keywords',     type: 'array',
-    toUI:  arr => (Array.isArray(arr) ? arr.join('; ') : ''),
-    fromUI: str => sanitizeList(str)
-  },
-  'file-exclude':    { path: 'exclude.file_keywords',    type: 'array',
-    toUI:  arr => (Array.isArray(arr) ? arr.join('; ') : ''),
-    fromUI: str => sanitizeList(str)
-  },
-  'ext-exclude':     { path: 'exclude.extensions',       type: 'array',
-    toUI:  arr => (Array.isArray(arr) ? arr.join('; ') : ''),
-    fromUI: str => sanitizeList(str, { lower: true, ensureDot: true })
-  },
-
-  // AVANZATE
-  'sevenzip':        { path: 'paths.sevenzip',           type: 'string' },
-  'alias-file':      { path: 'metadata.aliases_path',    type: 'string' },
-};
-
-// Helpers
-function sanitizeList(input, opts = {}) {
-  const { lower=false, ensureDot=false } = opts;
-  const out = (input || '')
-    .split(';')
-    .map(s => s.trim())
-    .filter(Boolean)
-    .map(s => {
-      let v = lower ? s.toLowerCase() : s;
-      if (ensureDot && !v.startsWith('.')) v = '.' + v;
-      return v;
-    });
-  return Array.from(new Set(out));
-}
-function coerceToType(value, type) {
-  switch (type) {
-    case 'boolean': return !!value;
-    case 'number':  return Number.isFinite(+value) ? (+value) : 0;
-    case 'array':   return Array.isArray(value) ? value : [];
-    default:        return (value ?? '');
-  }
-}
-
-// Carica user.json e popola i controlli (UI only, NESSUN salvataggio)
-async function loadSettingsIntoUI() {
-  try {
-    await waitForPyAPI(1200);
-    const api = py();
-    if (!api?.get_settings) return; // in modalità browser, niente pywebview
-
-    const s = await api.get_settings(); // legge user.json (via backend) :contentReference[oaicite:4]{index=4}
-
-    Object.entries(SETTINGS_MAP).forEach(([id, meta]) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-
-      // path a punti → valore
-      const parts = meta.path.split('.');
-      let cur = s;
-      for (const p of parts) cur = (cur && typeof cur === 'object') ? cur[p] : undefined;
-
-      const v = meta.toUI ? meta.toUI(cur) : coerceToType(cur, meta.type);
-
-      if (el.type === 'checkbox') el.checked = !!v;
-      else el.value = (v ?? '');
-    });
-
-    // applica tema UI
-    const themeSel = document.getElementById('theme');
-    const themeVal = themeSel?.value || 'dark';
-    applyTheme(themeVal);
-
-  } catch (e) {
-    console.warn('loadSettingsIntoUI error', e);
-  }
-}
-
-// Ripristina defaults → ricarica UI
 $('#restore')?.addEventListener('click', async () => {
-  try {
-    if (py()?.restore_defaults) {
-      await py().restore_defaults();         // copia defaults → user.json :contentReference[oaicite:5]{index=5}
-      await loadSettingsIntoUI();            // ripopola i campi
-      // opzionale: riallinea baseline dirty se disponibile
-      if (window.SettingsDirty?.commitAllBaselines) {
-        window.SettingsDirty.commitAllBaselines($('#view-settings'));
-      }
-    }
-    applyTheme('dark');
-    setStatus('Impostazioni ripristinate');
-  } catch {
-    setStatus('Errore nel ripristino delle impostazioni');
-  }
+  try { if (py()?.restore_defaults) await py().restore_defaults(); } catch {}
+  applyTheme('dark');
+  setStatus('Impostazioni ripristinate');
 });
 
-// SALVA (batch): legge tutti i controlli e fa set_setting(...) per ciascun path
 $('#save')?.addEventListener('click', async () => {
-  try {
-    await waitForPyAPI(1500);
-    const api = py();
-    if (!api?.set_setting) { setStatus('Salvataggio non disponibile'); return; }
-
-    // 1) raccogli i valori UI → payloads {path, value}
-    const ops = [];
-    for (const [id, meta] of Object.entries(SETTINGS_MAP)) {
-      const el = document.getElementById(id);
-      if (!el) continue;
-      let uiVal = (el.type === 'checkbox') ? el.checked : el.value;
-      uiVal = meta.fromUI ? meta.fromUI(uiVal) : coerceToType(uiVal, meta.type);
-      ops.push({ path: meta.path, value: uiVal });
-    }
-
-    // 2) applica tema subito (UX)
-    const themeOp = ops.find(o => o.path === 'ui.theme');
-    if (themeOp) applyTheme(themeOp.value || 'dark');
-
-    // 3) salva sequenzialmente (più semplice per log/errori)
-    for (const op of ops) {
-      await api.set_setting(op.path, op.value);  // wrapper → store.set_setting() :contentReference[oaicite:6]{index=6}
-    }
-
-    // 4) chiudi stato “salvataggio in corso” e resetta dirty
-    if (window.SettingsDirty?.commitAllBaselines) {
-      window.SettingsDirty.commitAllBaselines($('#view-settings'));
-    }
-    // chiude banner e messaggistica
-    if (typeof endSaving === 'function') endSaving();
-    setStatus('Impostazioni salvate');
-  } catch (e) {
-    console.error(e);
-    setStatus('Errore salvataggio');
-    // se vuoi, qui potresti lasciare il banner “in corso” finché non riprovi
-  }
+  const theme = $('#theme')?.value || 'dark';
+  applyTheme(theme);
+  try { if (py()?.set_setting) await py().set_setting('ui.theme', theme); } catch {}
+  setStatus('Impostazioni salvate');
 });
-
-// all’avvio: applica tema da localStorage e carica config in UI
-document.addEventListener('DOMContentLoaded', async () => {
-  loadTheme();
-  await loadSettingsIntoUI();
-});
-
-
 
 /* ==========================
    LIBRERIA: pick folder + scan
@@ -6042,22 +5798,41 @@ function initDirtyTracker() {
   const panelRoot = $(SEL.panel, settings) || settings;
   const rows = $$(SEL.row, panelRoot);
 
+  // Banner “bozza non salvata” nell’area actions
+  const actions = $(SEL.draftMount, settings);
+  if (actions && !$('.draft-info', actions)) {
+    const info = document.createElement('div');
+    info.className = 'draft-info';
+    info.innerHTML = `<span class="dot"></span> Bozza non salvata`;
+    info.style.display = 'none';
+    actions.prepend(info);
+  }
+
+  const tabForRow = (row) => {
+    const panel = row.closest('.tab-panel');
+    if (!panel) return null;
+    const dataTab = panel.getAttribute('data-tab');
+    return dataTab; // es: "tab-library"
+  };
+
+  const markTabDirty = (dataTab, on) => {
+    const label = $(`.tab-nav label[for="${dataTab}"]`);
+    if (!label) return;
+    label.classList.toggle('tab-dirty', !!on);
+  };
+
   const updateDraftVisibility = () => {
-    // SOLO dot sulle tab, nessun banner
-    const settings = document.querySelector('#view-settings');
-    if (!settings) return;
-  
-    const tabsRoot = document.querySelector('.settings-tabs');
-    if (!tabsRoot) return;
-  
-    const panels = Array.from(tabsRoot.querySelectorAll('.tab-panels .panel'));
-    const labels = Array.from(tabsRoot.querySelectorAll('.tab-nav label'));
-  
-    labels.forEach((lab, i) => {
-      const panel = panels[i];
-      if (!panel) return;
-      const dirtyInTab = panel.querySelectorAll('.settings-row.dirty').length > 0;
-      lab.classList.toggle('tab-dirty', dirtyInTab);
+    const anyDirty = rows.some(r => r.classList.contains('dirty'));
+    const banner = $('.draft-info', actions);
+    if (banner) banner.style.display = anyDirty ? 'inline-flex' : 'none';
+
+    const byTab = {};
+    rows.forEach(r => {
+      const t = tabForRow(r);
+      if (t) byTab[t] = byTab[t] || r.classList.contains('dirty');
+    });
+    ['tab-library','tab-scan','tab-logs','tab-ui','tab-esc','tab-adv'].forEach(id => {
+      markTabDirty(id, !!byTab[id]);
     });
   };
 
@@ -6070,37 +5845,6 @@ function initDirtyTracker() {
     return (ctrl.type === 'checkbox') ? (ctrl.checked !== orig)
                                       : (ctrl.value !== orig);
   };
-
-  // >>> API: "committa" il valore corrente come baseline originale
-  function commitControlBaseline(ctrl) {
-    if (!ctrl) return;
-    // aggiorna baseline
-    originals.set(ctrl, (ctrl.type === 'checkbox') ? ctrl.checked : ctrl.value);
-    // rimuovi eventuale pulsante reset del campo
-    removeResetButton(ctrl);
-    // ricalcola dirty della riga/tab/banner
-    const row = ctrl.closest('.settings-row');
-    if (row) row.classList.toggle('dirty', computeRowDirty(row));
-    updateDraftVisibility();
-  }
-
-  function commitAllBaselines(root = settings) {
-    const controls = $$('input, select, textarea', root);
-    controls.forEach(c => commitControlBaseline(c));
-  }
-
-  // Espongo una piccola API globale per integrazioni (es. salvataggi live)
-  window.SettingsDirty = {
-    commitControlBaseline,
-    commitAllBaselines,
-    refresh: updateDraftVisibility
-  };
-
-  // Listener generico: quando l’app segnala "settings:saved", committa il controllo
-  document.addEventListener('settings:saved', (e) => {
-    const ctrl = e?.detail?.control || null;
-    if (ctrl) commitControlBaseline(ctrl);
-  });
 
   const computeRowDirty = (row) => {
     const controls = $$('input, select, textarea', row);
@@ -6366,51 +6110,36 @@ function initDirtyTracker() {
     if (saveBtn && !saveBtn.dataset.saveHooked) {
       saveBtn.addEventListener('click', () => {
         beginSaving();
+        // demo: termina dopo 1.2s. Integra qui la tua logica reale e poi chiama endSaving().
+        setTimeout(endSaving, 1200);
       });
       saveBtn.dataset.saveHooked = '1';
     }
   }
 
   function beginSaving() {
-    const actions = document.querySelector('.settings-actions');
+    const actions = $(SEL.draftMount);
     if (!actions) return;
-  
-    // crea o recupera il banner SOLO per il salvataggio
-    let info = actions.querySelector('.save-info');
-    if (!info) {
-      info = document.createElement('div');
-      info.className = 'save-info';
-      actions.prepend(info);
+    const info = $('.draft-info', actions);
+    if (info) {
+      info.innerHTML = `<span class="loader-dot"></span><span class="loader-dot"></span><span class="loader-dot"></span> Salvataggio in corso…`;
+      info.style.display = 'inline-flex';
     }
-    info.innerHTML = `<span class="loader-dot"></span><span class="loader-dot"></span><span class="loader-dot"></span> Salvataggio in corso…`;
-    info.style.display = 'inline-flex';
-  
     say('Salvataggio in corso');
   }
-  
   function endSaving() {
-    const settings = document.querySelector('#view-settings');
+    const settings = $(SEL.settingsView);
     if (!settings) return;
-  
-    if (window.SettingsDirty?.commitAllBaselines) {
-      window.SettingsDirty.commitAllBaselines(settings);
-    }
-  
-    // azzera solo la UI (puntini sulle tab) — niente banner "bozza"
-    settings.querySelectorAll('.settings-row.dirty').forEach(r => r.classList.remove('dirty'));
-    document.querySelectorAll('.tab-nav label.tab-dirty').forEach(l => l.classList.remove('tab-dirty'));
-  
-    const actions = document.querySelector('.settings-actions');
-    const info = actions ? actions.querySelector('.save-info') : null;
+    // azzera dirty
+    $$('.settings-row.dirty', settings).forEach(r => r.classList.remove('dirty'));
+    $$('.tab-nav label.tab-dirty', settings).forEach(l => l.classList.remove('tab-dirty'));
+    const info = $('.draft-info', $(SEL.draftMount, settings));
     if (info) {
       info.innerHTML = `<span class="dot"></span> Impostazioni salvate`;
       setTimeout(() => { info.style.display = 'none'; }, 1400);
     }
-  
     say('Impostazioni salvate');
   }
-  
-  
 
   // ---------------------------------------------------
   // 5) Drag & drop per chip in #lib-list (riordino)
@@ -6603,36 +6332,19 @@ if __name__ == "__main__":
 
 ```json
 {
-  "library": {
-    "folders": [],
-    "default_folder": "",
-    "scan_on_startup": true,
-    "max_depth": 2,
-    "dedupe_titles": true
-  },
-  "scan": {
-    "show_progress": true
-  },
-  "logs": {
-    "keep_last": 10,
-    "auto_save_after_scan": false
-  },
-  "exclude": {
-    "dir_keywords": [],
-    "file_keywords": [],
-    "extensions": []
+  "ui": {
+    "theme": "dark",
+    "grid_size": "md"
   },
   "paths": {
+    "libraries": [],
     "sevenzip": "7z"
   },
-  "metadata": {
-    "aliases_path": ""
-  },
-  "ui": {
-    "theme": "dark"
+  "install": {
+    "silent_7z": true,
+    "hide_windows": true
   }
 }
-
 ```
 
 
@@ -6641,62 +6353,55 @@ if __name__ == "__main__":
 
 ```json
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "CustomInfo Game Library – Settings",
   "type": "object",
   "properties": {
-    "library": {
+    "ui": {
       "type": "object",
       "properties": {
-        "folders": { "type": "array", "items": { "type": "string" } },
-        "default_folder": { "type": "string" },
-        "scan_on_startup": { "type": "boolean" },
-        "max_depth": { "type": "integer", "minimum": 0, "maximum": 20 },
-        "dedupe_titles": { "type": "boolean" }
-      }
-    },
-    "scan": {
-      "type": "object",
-      "properties": {
-        "show_progress": { "type": "boolean" }
-      }
-    },
-    "logs": {
-      "type": "object",
-      "properties": {
-        "keep_last": { "type": "integer", "minimum": 0, "maximum": 500 },
-        "auto_save_after_scan": { "type": "boolean" }
-      }
-    },
-    "exclude": {
-      "type": "object",
-      "properties": {
-        "dir_keywords": { "type": "array", "items": { "type": "string" } },
-        "file_keywords": { "type": "array", "items": { "type": "string" } },
-        "extensions": { "type": "array", "items": { "type": "string" } }
+        "theme": {
+          "type": "string",
+          "enum": [
+            "dark",
+            "light"
+          ]
+        },
+        "grid_size": {
+          "type": "string",
+          "enum": [
+            "sm",
+            "md",
+            "lg"
+          ]
+        }
       }
     },
     "paths": {
       "type": "object",
       "properties": {
-        "sevenzip": { "type": "string", "description": "Percorso eseguibile 7-Zip (o '7z' nel PATH)" }
+        "libraries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sevenzip": {
+          "type": "string"
+        }
       }
     },
-    "metadata": {
+    "install": {
       "type": "object",
       "properties": {
-        "aliases_path": { "type": "string", "description": "File JSON alias titoli; vuoto = default modulo" }
-      }
-    },
-    "ui": {
-      "type": "object",
-      "properties": {
-        "theme": { "type": "string", "enum": ["dark", "light"] }
+        "silent_7z": {
+          "type": "boolean"
+        },
+        "hide_windows": {
+          "type": "boolean"
+        }
       }
     }
   }
 }
-
 ```
 
 
@@ -6705,40 +6410,17 @@ if __name__ == "__main__":
 
 ```json
 {
-  "library": {
-    "folders": [],
-    "default_folder": "",
-    "scan_on_startup": true,
-    "max_depth": 16,
-    "dedupe_titles": true
-  },
-  "scan": {
-    "show_progress": false
-  },
-  "logs": {
-    "keep_last": 22,
-    "auto_save_after_scan": true
-  },
-  "exclude": {
-    "dir_keywords": [
-      "cartelle escluse"
-    ],
-    "file_keywords": [
-      "file esclusi:"
-    ],
-    "extensions": [
-      ".estensioni escluse",
-      ".ciro"
-    ]
+  "ui": {
+    "theme": "dark",
+    "grid_size": "md"
   },
   "paths": {
+    "libraries": [],
     "sevenzip": "7z"
   },
-  "metadata": {
-    "aliases_path": "ciruzzo"
-  },
-  "ui": {
-    "theme": "dark"
+  "install": {
+    "silent_7z": true,
+    "hide_windows": true
   }
 }
 ```
