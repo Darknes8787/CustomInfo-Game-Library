@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T21:05:01.817361Z_
+_Generated: 2025-10-09T21:08:01.819508Z_
 
 ## Table of contents
 
@@ -6352,42 +6352,47 @@ function initDirtyTracker() {
       });
       saveBtn.dataset.saveHooked = '1';
     }
-
   }
 
   function beginSaving() {
-    const actions = $(SEL.draftMount);
+    const actions = document.querySelector('.settings-actions');
     if (!actions) return;
-    const info = $('.draft-info', actions);
-    if (info) {
-      info.classList.add('saving');
-      info.classList.remove('saved');
-      info.innerHTML = `<span class="loader-dot"></span><span class="loader-dot"></span><span class="loader-dot"></span> Salvataggio in corso…`;
-      info.style.display = 'inline-flex';
+  
+    // crea o recupera il banner SOLO per il salvataggio
+    let info = actions.querySelector('.save-info');
+    if (!info) {
+      info = document.createElement('div');
+      info.className = 'save-info';
+      actions.prepend(info);
     }
+    info.innerHTML = `<span class="loader-dot"></span><span class="loader-dot"></span><span class="loader-dot"></span> Salvataggio in corso…`;
+    info.style.display = 'inline-flex';
+  
     say('Salvataggio in corso');
   }
   
   function endSaving() {
-    const settings = $(SEL.settingsView);
+    const settings = document.querySelector('#view-settings');
     if (!settings) return;
   
     if (window.SettingsDirty?.commitAllBaselines) {
       window.SettingsDirty.commitAllBaselines(settings);
     }
   
-    $$('.settings-row.dirty', settings).forEach(r => r.classList.remove('dirty'));
-    $$('.tab-nav label.tab-dirty', settings).forEach(l => l.classList.remove('tab-dirty'));
+    // azzera solo la UI (puntini sulle tab) — niente banner "bozza"
+    settings.querySelectorAll('.settings-row.dirty').forEach(r => r.classList.remove('dirty'));
+    document.querySelectorAll('.tab-nav label.tab-dirty').forEach(l => l.classList.remove('tab-dirty'));
   
-    const info = $('.draft-info', $(SEL.draftMount, settings));
+    const actions = document.querySelector('.settings-actions');
+    const info = actions ? actions.querySelector('.save-info') : null;
     if (info) {
-      info.classList.remove('saving');
-      info.classList.add('saved');
       info.innerHTML = `<span class="dot"></span> Impostazioni salvate`;
       setTimeout(() => { info.style.display = 'none'; }, 1400);
     }
+  
     say('Impostazioni salvate');
   }
+  
   
 
   // ---------------------------------------------------
@@ -6687,30 +6692,36 @@ if __name__ == "__main__":
     "folders": [],
     "default_folder": "",
     "scan_on_startup": true,
-    "max_depth": 2,
+    "max_depth": 16,
     "dedupe_titles": true
   },
   "scan": {
-    "show_progress": true
+    "show_progress": false
   },
   "logs": {
     "keep_last": 22,
     "auto_save_after_scan": true
   },
   "exclude": {
-    "dir_keywords": [],
-    "file_keywords": [],
-    "extensions": []
+    "dir_keywords": [
+      "cartelle escluse"
+    ],
+    "file_keywords": [
+      "file esclusi:"
+    ],
+    "extensions": [
+      ".estensioni escluse",
+      ".ciro"
+    ]
   },
   "paths": {
     "sevenzip": "7z"
   },
   "metadata": {
-    "aliases_path": ""
+    "aliases_path": "ciruzzo"
   },
   "ui": {
-    "theme": "dark",
-    "show_progress": true
+    "theme": "dark"
   }
 }
 ```
