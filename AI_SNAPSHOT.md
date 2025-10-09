@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T20:32:01.819972Z_
+_Generated: 2025-10-09T20:35:01.812702Z_
 
 ## Table of contents
 
@@ -6322,48 +6322,47 @@ function initDirtyTracker() {
       }
     });
 
-    // “Salva” → feedback banner
-    const saveBtn = $(SEL.saveBtn);
-    if (saveBtn && !saveBtn.dataset.saveHooked) {
-      saveBtn.addEventListener('click', () => {
-        beginSaving();
-        // niente endSaving qui: verrà chiamato da app.js quando tutte le set_setting sono completate
-      });
-      saveBtn.dataset.saveHooked = '1';
-    }
+  // Gate: consente "Salvataggio in corso…" SOLO quando parte da Salva/Ctrl+S
+let __manualSaveGate = false;
+
+// “Salva” → mostra banner IN CORSO (chiusura demandata ad app.js)
+const saveBtn = $(SEL.saveBtn);
+if (saveBtn && !saveBtn.dataset.saveHooked) {
+  saveBtn.addEventListener('click', () => {
+    __manualSaveGate = true;
+    beginSaving();
+    __manualSaveGate = false;
+    // Nessun setTimeout: endSaving() verrà chiamato da app.js a salvataggio completato
+  });
+  saveBtn.dataset.saveHooked = '1';
+}
+
+function beginSaving() {
+  // se non autorizzato dal gate, ignora eventuali chiamate spurie
+  if (!__manualSaveGate) return;
+
+  const actions = $(SEL.draftMount);
+  if (!actions) return;
+  const info = $('.draft-info', actions);
+  if (info) {
+    info.innerHTML = `<span class="loader-dot"></span><span class="loader-dot"></span><span class="loader-dot"></span> Salvataggio in corso…`;
+    info.style.display = 'inline-flex';
   }
-
-  function beginSaving() {
-    const actions = $(SEL.draftMount);
-    if (!actions) return;
-    const info = $('.draft-info', actions);
-    if (info) {
-      info.innerHTML = `<span class="loader-dot"></span><span class="loader-dot"></span><span class="loader-dot"></span> Salvataggio in corso…`;
-      info.style.display = 'inline-flex';
-    }
-    say('Salvataggio in corso');
+  say('Salvataggio in corso');
+}
+function endSaving() {
+  const settings = $(SEL.settingsView);
+  if (!settings) return;
+  // azzera dirty
+  $$('.settings-row.dirty', settings).forEach(r => r.classList.remove('dirty'));
+  $$('.tab-nav label.tab-dirty', settings).forEach(l => l.classList.remove('tab-dirty'));
+  const info = $('.draft-info', $(SEL.draftMount, settings));
+  if (info) {
+    info.innerHTML = `<span class="dot"></span> Impostazioni salvate`;
+    setTimeout(() => { info.style.display = 'none'; }, 1400);
   }
-
-  function endSaving() {
-    const settings = $(SEL.settingsView);
-    if (!settings) return;
-
-    // >>> committa tutti i controlli come baseline (post-salvataggio)
-    if (window.SettingsDirty?.commitAllBaselines) {
-      window.SettingsDirty.commitAllBaselines(settings);
-    }
-
-    // azzera dirty (ridondante ma rende l’UX immediata)
-    $$('.settings-row.dirty', settings).forEach(r => r.classList.remove('dirty'));
-    $$('.tab-nav label.tab-dirty', settings).forEach(l => l.classList.remove('tab-dirty'));
-
-    const info = $('.draft-info', $(SEL.draftMount, settings));
-    if (info) {
-      info.innerHTML = `<span class="dot"></span> Impostazioni salvate`;
-      setTimeout(() => { info.style.display = 'none'; }, 1400);
-    }
-    say('Impostazioni salvate');
-  }
+  say('Impostazioni salvate');
+}
 
   // ---------------------------------------------------
   // 5) Drag & drop per chip in #lib-list (riordino)
