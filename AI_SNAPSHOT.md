@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T20:53:01.812140Z_
+_Generated: 2025-10-09T20:56:01.824923Z_
 
 ## Table of contents
 
@@ -2271,9 +2271,9 @@ class LibraryService:
 <a name="F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicessettingsstorepy"></a>
 
 ```python
-import json, shutil, os
-from pathlib import Path
 import time
+import os, json, shutil, time, tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]  # points to /app
 CONFIG = ROOT.parent / "config"
@@ -2321,24 +2321,51 @@ class SettingsStore:
 
     def _atomic_write(self, path: Path, payload: dict):
         """
-        Scrive atomica: tmp + replace con retry, per evitare PermissionError su Windows.
+        Scrittura atomica robusta su Windows:
+        - crea un tmp file UNICO nello stesso folder
+        - retry su open/write e su replace (file lock/antivirus)
         """
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = json.dumps(payload, indent=2, ensure_ascii=False)
+    
+        # 1) crea tmp unico
+        tmp_path = None
         for attempt in range(3):
-            try:
-                os.replace(tmp, path)
-                return
-            except PermissionError as e:
-                time.sleep(0.15 * (attempt + 1))
-            except Exception:
-                break
-        # fallback: se non riesce, tenta scrittura diretta (meno sicura ma evita crash)
+          try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", delete=False,
+                dir=str(path.parent), prefix=path.stem + ".", suffix=".tmp"
+            ) as tf:
+              tf.write(content)
+              tmp_path = Path(tf.name)
+            break
+          except PermissionError:
+            time.sleep(0.15 * (attempt + 1))
+        if tmp_path is None:
+          # fallback estremo
+          path.write_text(content, encoding="utf-8")
+          return
+    
+        # 2) replace con retry
+        for attempt in range(5):
+          try:
+            os.replace(str(tmp_path), str(path))
+            return
+          except PermissionError:
+            time.sleep(0.2 * (attempt + 1))
+          except Exception:
+            break
+        
+        # 3) fallback: scrittura diretta (evita crash)
         try:
-            path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        except Exception as e:
-            print("[SettingsStore] ERRORE scrittura file config:", e)
+          path.write_text(content, encoding="utf-8")
+        finally:
+          try:
+            if tmp_path.exists():
+              tmp_path.unlink(missing_ok=True)
+          except Exception:
+            pass
+
 
     def set_setting(self, path, value):
         # path es: "ui.theme" oppure "install.silent_7z"
@@ -6380,32 +6407,35 @@ function initDirtyTracker() {
     if (!actions) return;
     const info = $('.draft-info', actions);
     if (info) {
+      info.classList.add('saving');
+      info.classList.remove('saved');
       info.innerHTML = `<span class="loader-dot"></span><span class="loader-dot"></span><span class="loader-dot"></span> Salvataggio in corso…`;
       info.style.display = 'inline-flex';
     }
     say('Salvataggio in corso');
   }
-
+  
   function endSaving() {
     const settings = $(SEL.settingsView);
     if (!settings) return;
-
-    // >>> committa tutti i controlli come baseline (post-salvataggio)
+  
     if (window.SettingsDirty?.commitAllBaselines) {
       window.SettingsDirty.commitAllBaselines(settings);
     }
-
-    // azzera dirty (ridondante ma rende l’UX immediata)
+  
     $$('.settings-row.dirty', settings).forEach(r => r.classList.remove('dirty'));
     $$('.tab-nav label.tab-dirty', settings).forEach(l => l.classList.remove('tab-dirty'));
-
+  
     const info = $('.draft-info', $(SEL.draftMount, settings));
     if (info) {
+      info.classList.remove('saving');
+      info.classList.add('saved');
       info.innerHTML = `<span class="dot"></span> Impostazioni salvate`;
       setTimeout(() => { info.style.display = 'none'; }, 1400);
     }
     say('Impostazioni salvate');
   }
+  
 
   // ---------------------------------------------------
   // 5) Drag & drop per chip in #lib-list (riordino)
@@ -6704,7 +6734,7 @@ if __name__ == "__main__":
     "folders": [],
     "default_folder": "",
     "scan_on_startup": false,
-    "max_depth": 19,
+    "max_depth": 22,
     "dedupe_titles": false
   },
   "scan": {
