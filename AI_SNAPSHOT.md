@@ -1,22 +1,16 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T17:50:10.592142Z_
+_Generated: 2025-10-09T17:52:04.403094Z_
 
 ## Table of contents
 
 - [F:/Programmi/Programmazione/Tool Libreria Giochi PC/README.md](#F:ProgrammiProgrammazioneTool Libreria Giochi PCREADMEmd)
-- [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/__init__.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCapp--init--py)
-- [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/__init__.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackend--init--py)
 - [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/app.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendapppy)
-- [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/__init__.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservices--init--py)
-- [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/installers/__init__.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicesinstallers--init--py)
 - [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/installers/runner.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicesinstallersrunnerpy)
-- [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/metadata/__init__.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicesmetadata--init--py)
 - [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/metadata/constants.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicesmetadataconstantspy)
 - [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/metadata/db.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicesmetadatadbpy)
 - [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/metadata/game_aliases.json](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicesmetadatagame-aliasesjson)
 - [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/metadata/library.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicesmetadatalibrarypy)
-- [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/settings/__init__.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicessettings--init--py)
 - [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/settings/store.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicessettingsstorepy)
 - [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/utils/cleanup_logs.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendutilscleanup-logspy)
 - [F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/utils/events.py](#F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendutilseventspy)
@@ -63,22 +57,6 @@ pip install -r requirements.txt
 python app/main.py
 ```
 "# CustomInfo-Game-Library" 
-
-```
-
-
-### F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/__init__.py
-<a name="F:ProgrammiProgrammazioneTool Libreria Giochi PCapp--init--py"></a>
-
-```python
-
-```
-
-
-### F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/__init__.py
-<a name="F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackend--init--py"></a>
-
-```python
 
 ```
 
@@ -238,22 +216,6 @@ def create_backend():
 ```
 
 
-### F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/__init__.py
-<a name="F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservices--init--py"></a>
-
-```python
-
-```
-
-
-### F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/installers/__init__.py
-<a name="F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicesinstallers--init--py"></a>
-
-```python
-
-```
-
-
 ### F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/installers/runner.py
 <a name="F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicesinstallersrunnerpy"></a>
 
@@ -326,14 +288,6 @@ class InstallerRunner:
         status = "installed" if code == 0 else "failed"
         self.events.emit("installer/done", {"game_id": game_id, "status": status})
         return {"status": status}
-
-```
-
-
-### F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/metadata/__init__.py
-<a name="F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicesmetadata--init--py"></a>
-
-```python
 
 ```
 
@@ -2309,14 +2263,6 @@ class LibraryService:
             pass
         
         return box["title"]
-
-```
-
-
-### F:/Programmi/Programmazione/Tool Libreria Giochi PC/app/backend/services/settings/__init__.py
-<a name="F:ProgrammiProgrammazioneTool Libreria Giochi PCappbackendservicessettings--init--py"></a>
-
-```python
 
 ```
 
