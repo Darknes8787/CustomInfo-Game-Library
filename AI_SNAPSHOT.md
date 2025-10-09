@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T20:02:01.818059Z_
+_Generated: 2025-10-09T20:05:01.817429Z_
 
 ## Table of contents
 
@@ -5958,6 +5958,9 @@ const UIUtils = (() => {
 // ---------------------------------------------------
 // 3) Dirty state (riga + tab) & reset per campo (FIXED)
 // ---------------------------------------------------
+// ---------------------------------------------------
+// 3) Dirty state (riga + tab) & reset per campo (FIXED)
+// ---------------------------------------------------
 let __dirtyAPI = { markControlClean: null, resetDirtyBaselines: null };
 
 function initDirtyTracker() {
@@ -5980,8 +5983,8 @@ function initDirtyTracker() {
   const tabForRow = (row) => {
     const panel = row.closest('.tab-panel');
     if (!panel) return null;
-    const dataTab = panel.getAttribute('data-tab');
-    return dataTab; // es: "tab-library"
+    const dataTab = panel.getAttribute('data-tab'); // es: "tab-library"
+    return dataTab;
   };
 
   const markTabDirty = (dataTab, on) => {
@@ -6005,7 +6008,7 @@ function initDirtyTracker() {
     });
   };
 
-  // ---- NUOVO: tracciamo i valori originali e i reset-button per controllo
+  // ---- mappa baseline & reset-btn
   const originals = new WeakMap();   // control -> originalValue
   const resetBtns = new WeakMap();   // control -> <button>
 
@@ -6026,25 +6029,19 @@ function initDirtyTracker() {
       btn.remove();
       resetBtns.delete(control);
     }
-    // se per qualche motivo esiste un field-wrap subito prima MA è vuoto → rimuovilo
     const prev = control.previousElementSibling;
     if (prev && prev.classList?.contains('field-wrap') && prev.childElementCount === 0) {
       prev.remove();
-  }
-    // importantissimo: consente di ricrearlo dopo nuove modifiche
+    }
     delete control.dataset.resetAttached;
   };
 
-
-  // Per i number riutilizzeremo il wrapper .num-wrap (già esistente) quando presente.
   const ensureFieldWrap = (ctrl) => {
-    // 1) tipologia
     const isTextarea = (ctrl.tagName === 'TEXTAREA');
     const isNumber   = (ctrl.tagName === 'INPUT' && ctrl.type === 'number');
     const isTextish  = (ctrl.tagName === 'INPUT' && /^(text|search|email|password)$/i.test(ctrl.type))
                     || (ctrl.tagName === 'SELECT');
-  
-    // 2) se l'input è già dentro un field-wrap → riuso
+
     const existingWrap = ctrl.closest('.field-wrap');
     if (existingWrap) {
       existingWrap.classList.toggle('field--textarea', isTextarea);
@@ -6052,19 +6049,16 @@ function initDirtyTracker() {
       existingWrap.classList.toggle('field--text',     (isTextish && !isNumber && !isTextarea));
       return existingWrap;
     }
-  
-    // 3) caso speciale number: se ha il wrapper spinner esterno, quello diventa il "target"
+
     const baseTarget =
       (ctrl.parentElement && ctrl.parentElement.classList.contains('num-wrap'))
         ? ctrl.parentElement
         : ctrl;
-  
-    // 4) se subito PRIMA c'è un field-wrap "orfano" (vuoto) → riusalo invece di crearne uno nuovo
+
     const prev = baseTarget.previousElementSibling;
     if (prev && prev.classList?.contains('field-wrap')) {
-      // se è vuoto o contiene solo spazi/commenti, lo riuso
       const hasMeaningfulChildren = Array.from(prev.childNodes)
-        .some(n => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim() !== ''));
+        .some(n => n.nodeType === 1 || (n.nodeType === 3 && /\S/.test(n.nodeValue || '')));
       if (!hasMeaningfulChildren) {
         prev.classList.toggle('field--textarea', isTextarea);
         prev.classList.toggle('field--number',   isNumber);
@@ -6073,90 +6067,49 @@ function initDirtyTracker() {
         return prev;
       }
     }
-  
-    // 5) crea UN solo wrapper e sposta dentro il target
-    const wrap = document.createElement('span');
+
+    const wrap = document.createElement('div');
     wrap.className = 'field-wrap';
     wrap.classList.toggle('field--textarea', isTextarea);
     wrap.classList.toggle('field--number',   isNumber);
     wrap.classList.toggle('field--text',     (isTextish && !isNumber && !isTextarea));
-  
-    baseTarget.insertAdjacentElement('beforebegin', wrap);
+
+    baseTarget.parentNode.insertBefore(wrap, baseTarget);
     wrap.appendChild(baseTarget);
-  
     return wrap;
   };
-  
 
+  // reset-button per campo
   const addResetButton = (row, control) => {
-    if (!control || control.dataset.resetAttached) return;
-    const originalValue = originals.get(control);
-  
+    if (control.dataset.resetAttached) return;
+
+    const wrap = ensureFieldWrap(control);
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'field-reset';
-    btn.title = 'Ripristina valore';
-    btn.textContent = '↺';
-  
-    const isTextLike = control.matches('input[type="text"], input[type="search"], input[type="email"], input[type="password"]');
-    const isSelect   = control.matches('select');
-    const isNumber   = control.matches('input[type="number"]');
-  
-    if (isNumber) {
-      // >>> NUMERICI: reset DOPO la num-wrap (che contiene input + frecce)
-      const wrap = ensureFieldWrap(control);  // se l'input è in .num-wrap, wrappa la .num-wrap
-      wrap.classList.add('field--number');
-      wrap.appendChild(btn); // lo mettiamo come ULTIMO figlio (dopo le frecce)
-      // Mantieni la corsia aperta SOLO se al momento del click il focus è sul number
-      btn.addEventListener('pointerdown', () => {
-        if (document.activeElement === control) wrap.classList.add('keep-lane');
-      });
-      // rimuovi al termine dell'interazione
-      const _closeLane = () => wrap.classList.remove('keep-lane');
-      btn.addEventListener('pointerup', _closeLane);
-      btn.addEventListener('pointercancel', _closeLane);
-      btn.addEventListener('blur', _closeLane);
+    btn.className = 'btn-mini ghost reset-field';
+    btn.innerHTML = 'Ripristina';
+    btn.title = 'Ripristina valore originale';
 
-    }
-    else if (isTextLike || isSelect) {
-      // >>> TESTO/SELECT: reset accanto (logica già usata sul primo caso)
-      const wrap = ensureFieldWrap(control);
-      wrap.classList.add('field--text');
-      wrap.appendChild(btn);
-    }
-    else {
-      // fallback generico
-      control.insertAdjacentElement('afterend', btn);
-    }
-  
-    resetBtns.set(control, btn);
+    wrap.prepend(btn);
     control.dataset.resetAttached = '1';
-  
+    resetBtns.set(control, btn);
+
     btn.addEventListener('click', () => {
-      // ripristina
-      if (control.type === 'checkbox') control.checked = !!originalValue;
-      else control.value = (originalValue ?? '');
-  
-      control.dispatchEvent(new Event('input',  { bubbles: true }));
+      const orig = originals.get(control);
+      if (control.type === 'checkbox') control.checked = !!orig;
+      else control.value = (orig ?? '');
+
+      // notifica change per riallineare la UI e la logica esterna
       control.dispatchEvent(new Event('change', { bubbles: true }));
-  
-      // se non è più dirty, rimuovi il reset
-      if (!isControlChanged(control)) {
-        btn.remove();
-        resetBtns.delete(control);
-        delete control.dataset.resetAttached;
-      }
-  
-      // ricalcola stato riga e banner
+
+      if (!isControlChanged(control)) removeResetButton(control);
+
       row.classList.toggle('dirty', computeRowDirty(row));
       updateDraftVisibility();
     });
   };
-  
 
-
-  // Setup per ogni riga/controllo
-  // --- PRE-WRAP FIX: evita perdita focus spostando i campi PRIMA dei listener ---
+  // PRE-WRAP: costruisco i contenitori prima di aggiungere listener
   rows.forEach(row => {
     const controls = $$('input, select, textarea', row);
     controls.forEach(ctrl => {
@@ -6171,29 +6124,20 @@ function initDirtyTracker() {
     });
   });
 
-  // Setup per ogni riga/controllo
+  // setup per ogni controllo: salva baseline e osserva cambi
   rows.forEach(row => {
     const controls = $$('input, select, textarea', row);
 
     controls.forEach(ctrl => {
-      // salva il valore originale iniziale
       const orig = (ctrl.type === 'checkbox') ? ctrl.checked : ctrl.value;
       originals.set(ctrl, orig);
 
       const onChange = () => {
         const changed = isControlChanged(ctrl);
+        if (changed) addResetButton(row, ctrl);
+        else removeResetButton(ctrl);
 
-        if (changed) {
-          addResetButton(row, ctrl);
-        } else {
-          // se il controllo è tornato al valore originale, togli il suo reset
-          removeResetButton(ctrl);
-        }
-
-        // la riga è dirty se QUALSIASI controllo dentro è cambiato
-        const rowDirty = computeRowDirty(row);
-        row.classList.toggle('dirty', rowDirty);
-
+        row.classList.toggle('dirty', computeRowDirty(row));
         updateDraftVisibility();
       };
 
@@ -6203,7 +6147,35 @@ function initDirtyTracker() {
   });
 
   updateDraftVisibility();
+
+  // === API INTERNE: usate dal salvataggio live ===
+  __dirtyAPI.markControlClean = (control) => {
+    if (!control) return;
+    const row = control.closest('.settings-row');
+    // allinea baseline al valore corrente
+    const now = (control.type === 'checkbox') ? control.checked : control.value;
+    originals.set(control, now);
+    // rimuovi reset se presente
+    removeResetButton(control);
+    // ricalcola stato riga + banner/tab
+    if (row) row.classList.toggle('dirty', computeRowDirty(row));
+    updateDraftVisibility();
+  };
+
+  __dirtyAPI.resetDirtyBaselines = () => {
+    rows.forEach(row => {
+      const controls = $$('input, select, textarea', row);
+      controls.forEach(ctrl => {
+        const now = (ctrl.type === 'checkbox') ? ctrl.checked : ctrl.value;
+        originals.set(ctrl, now);
+        removeResetButton(ctrl);
+      });
+      row.classList.remove('dirty');
+    });
+    updateDraftVisibility();
+  };
 }
+
 
 
   // ---------------------------------------------------
