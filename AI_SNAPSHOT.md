@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T20:38:01.823641Z_
+_Generated: 2025-10-09T20:41:01.813455Z_
 
 ## Table of contents
 
@@ -2273,6 +2273,7 @@ class LibraryService:
 ```python
 import json, shutil, os
 from pathlib import Path
+import time
 
 ROOT = Path(__file__).resolve().parents[3]  # points to /app
 CONFIG = ROOT.parent / "config"
@@ -2320,11 +2321,24 @@ class SettingsStore:
 
     def _atomic_write(self, path: Path, payload: dict):
         """
-        Scrive atomica: tmp + replace. Evita file troncati che causano JSONDecodeError.
+        Scrive atomica: tmp + replace con retry, per evitare PermissionError su Windows.
         """
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        os.replace(tmp, path)
+
+        for attempt in range(3):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError as e:
+                time.sleep(0.15 * (attempt + 1))
+            except Exception:
+                break
+        # fallback: se non riesce, tenta scrittura diretta (meno sicura ma evita crash)
+        try:
+            path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        except Exception as e:
+            print("[SettingsStore] ERRORE scrittura file config:", e)
 
     def set_setting(self, path, value):
         # path es: "ui.theme" oppure "install.silent_7z"
@@ -6327,8 +6341,6 @@ function initDirtyTracker() {
     if (saveBtn && !saveBtn.dataset.saveHooked) {
       saveBtn.addEventListener('click', () => {
         beginSaving();
-        // demo: termina dopo 1.2s. Integra qui la tua logica reale e poi chiama endSaving().
-        setTimeout(endSaving, 1200);
       });
       saveBtn.dataset.saveHooked = '1';
     }
@@ -6662,9 +6674,9 @@ if __name__ == "__main__":
   "library": {
     "folders": [],
     "default_folder": "",
-    "scan_on_startup": true,
-    "max_depth": 2,
-    "dedupe_titles": true
+    "scan_on_startup": false,
+    "max_depth": 11,
+    "dedupe_titles": false
   },
   "scan": {
     "show_progress": true
