@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T20:26:01.820189Z_
+_Generated: 2025-10-09T20:29:01.823244Z_
 
 ## Table of contents
 
@@ -6662,7 +6662,7 @@ if __name__ == "__main__":
     "folders": [],
     "default_folder": "",
     "scan_on_startup": false,
-    "max_depth": 3,
+    "max_depth": 12,
     "dedupe_titles": true
   },
   "scan": {
@@ -6678,7 +6678,7 @@ if __name__ == "__main__":
     "extensions": []
   },
   "paths": {
-    "sevenzip": ""
+    "sevenzip": "7z"
   },
   "metadata": {
     "aliases_path": ""
