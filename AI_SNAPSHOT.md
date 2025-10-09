@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T20:20:01.817175Z_
+_Generated: 2025-10-09T20:23:01.825140Z_
 
 ## Table of contents
 
@@ -2290,25 +2290,63 @@ class SettingsStore:
         if not USER.exists() and DEFAULTS.exists():
             shutil.copy(DEFAULTS, USER)
 
+    def _read_json_safe(self, path: Path):
+        """
+        Legge JSON in modo sicuro.
+        Se vuoto/non valido: ritorna None.
+        """
+        try:
+            txt = path.read_text(encoding="utf-8")
+            if not txt.strip():
+                return None
+            return json.loads(txt)
+        except Exception:
+            return None
+
+    def _load_defaults(self):
+        data = self._read_json_safe(DEFAULTS) or {}
+        return data
+
     def get_user_settings(self):
-        return json.loads(USER.read_text(encoding="utf-8"))
+        data = self._read_json_safe(USER)
+        if data is None:
+            # user.json corrotto o vuoto → ripristina dai defaults
+            data = self._load_defaults()
+            try:
+                USER.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+        return data
+
+    def _atomic_write(self, path: Path, payload: dict):
+        """
+        Scrive atomica: tmp + replace. Evita file troncati che causano JSONDecodeError.
+        """
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
 
     def set_setting(self, path, value):
         # path es: "ui.theme" oppure "install.silent_7z"
-        data = self.get_user_settings()
+        data = self.get_user_settings()  # già robusto
         keys = path.split(".")
         ref = data
         for k in keys[:-1]:
             ref = ref.setdefault(k, {})
         ref[keys[-1]] = value
-        USER.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+        # scrittura atomica
+        self._atomic_write(USER, data)
+
         self.events.emit("settings/changed", {"path": path, "value": value})
         return True
 
     def restore_defaults(self):
-        shutil.copy(DEFAULTS, USER)
+        defaults = self._load_defaults()
+        self._atomic_write(USER, defaults)
         self.events.emit("settings/restored", self.get_user_settings())
         return True
+
 ```
 
 
@@ -6648,7 +6686,7 @@ if __name__ == "__main__":
     "folders": [],
     "default_folder": "C:\\Ciruzzo",
     "scan_on_startup": true,
-    "max_depth": 3,
+    "max_depth": 23,
     "dedupe_titles": true
   },
   "scan": {
