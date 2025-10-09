@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T19:58:50.894361Z_
+_Generated: 2025-10-09T20:02:01.818059Z_
 
 ## Table of contents
 
@@ -5958,6 +5958,8 @@ const UIUtils = (() => {
 // ---------------------------------------------------
 // 3) Dirty state (riga + tab) & reset per campo (FIXED)
 // ---------------------------------------------------
+let __dirtyAPI = { markControlClean: null, resetDirtyBaselines: null };
+
 function initDirtyTracker() {
   const settings = $(SEL.settingsView);
   if (!settings) return;
