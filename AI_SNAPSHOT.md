@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T21:02:01.826160Z_
+_Generated: 2025-10-09T21:05:01.817361Z_
 
 ## Table of contents
 
@@ -6025,71 +6025,24 @@ function initDirtyTracker() {
   const panelRoot = $(SEL.panel, settings) || settings;
   const rows = $$(SEL.row, panelRoot);
 
-  // Banner “bozza non salvata” nell’area actions
-  const actions = $(SEL.draftMount, settings);
-  if (actions && !$('.draft-info', actions)) {
-    const info = document.createElement('div');
-    info.className = 'draft-info';
-    info.innerHTML = `<span class="dot"></span> Bozza non salvata`;
-    info.style.display = 'none';
-    actions.prepend(info);
-  }
-
-  const tabForRow = (row) => {
-    const panel = row.closest('.tab-panel');
-    if (!panel) return null;
-    const dataTab = panel.getAttribute('data-tab');
-    return dataTab; // es: "tab-library"
-  };
-
-  const markTabDirty = (dataTab, on) => {
-    const label = $(`.tab-nav label[for="${dataTab}"]`);
-    if (!label) return;
-    label.classList.toggle('tab-dirty', !!on);
-  };
-
   const updateDraftVisibility = () => {
-    const rows = $$('.settings-row', settings);
-    const anyDirty = rows.some(r => r.classList.contains('dirty'));
+    // SOLO dot sulle tab, nessun banner
+    const settings = document.querySelector('#view-settings');
+    if (!settings) return;
   
-    const actions = $(SEL.draftMount, settings);
-    if (!actions) return;
+    const tabsRoot = document.querySelector('.settings-tabs');
+    if (!tabsRoot) return;
   
-    let banner = $('.draft-info', actions);
-    if (!banner) {
-      banner = document.createElement('div');
-      banner.className = 'draft-info';
-      // stato iniziale: bozza
-      banner.innerHTML = `<span class="dot"></span> Bozza non salvata`;
-      actions.appendChild(banner);
-    }
+    const panels = Array.from(tabsRoot.querySelectorAll('.tab-panels .panel'));
+    const labels = Array.from(tabsRoot.querySelectorAll('.tab-nav label'));
   
-    if (anyDirty) {
-      // Se NON stiamo salvando, forza testo “Bozza non salvata”
-      if (!banner.classList.contains('saving')) {
-        banner.classList.remove('saved');
-        banner.innerHTML = `<span class="dot"></span> Bozza non salvata`;
-      }
-      banner.style.display = 'inline-flex';
-    } else {
-      // Nessuna modifica → nascondi (verrà poi gestito da endSaving quando serve)
-      banner.style.display = 'none';
-    }
-  
-    // Dirty dot sulle tab
-    const tabsRoot = $(SEL.tabsRoot);
-    if (tabsRoot) {
-      const panels = $$('.tab-panels .panel', tabsRoot);
-      const labels = $$('.tab-nav label', tabsRoot);
-      labels.forEach((lab, i) => {
-        const panel = panels[i];
-        if (!panel) return;
-        const dirtyInTab = $$('.settings-row.dirty', panel).length > 0;
-        lab.classList.toggle('tab-dirty', dirtyInTab);
-      });
-    }
+    labels.forEach((lab, i) => {
+      const panel = panels[i];
+      if (!panel) return;
+      const dirtyInTab = panel.querySelectorAll('.settings-row.dirty').length > 0;
+      lab.classList.toggle('tab-dirty', dirtyInTab);
+    });
   };
-  
 
   // ---- NUOVO: tracciamo i valori originali e i reset-button per controllo
   const originals = new WeakMap();   // control -> originalValue
@@ -6741,8 +6694,8 @@ if __name__ == "__main__":
     "show_progress": true
   },
   "logs": {
-    "keep_last": 10,
-    "auto_save_after_scan": false
+    "keep_last": 22,
+    "auto_save_after_scan": true
   },
   "exclude": {
     "dir_keywords": [],
@@ -6756,7 +6709,8 @@ if __name__ == "__main__":
     "aliases_path": ""
   },
   "ui": {
-    "theme": "dark"
+    "theme": "dark",
+    "show_progress": true
   }
 }
 ```
