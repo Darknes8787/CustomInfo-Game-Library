@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T20:50:01.829687Z_
+_Generated: 2025-10-09T20:53:01.812140Z_
 
 ## Table of contents
 
@@ -6022,19 +6022,47 @@ function initDirtyTracker() {
   };
 
   const updateDraftVisibility = () => {
+    const rows = $$('.settings-row', settings);
     const anyDirty = rows.some(r => r.classList.contains('dirty'));
-    const banner = $('.draft-info', actions);
-    if (banner) banner.style.display = anyDirty ? 'inline-flex' : 'none';
-
-    const byTab = {};
-    rows.forEach(r => {
-      const t = tabForRow(r);
-      if (t) byTab[t] = byTab[t] || r.classList.contains('dirty');
-    });
-    ['tab-library','tab-scan','tab-logs','tab-ui','tab-esc','tab-adv'].forEach(id => {
-      markTabDirty(id, !!byTab[id]);
-    });
+  
+    const actions = $(SEL.draftMount, settings);
+    if (!actions) return;
+  
+    let banner = $('.draft-info', actions);
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.className = 'draft-info';
+      // stato iniziale: bozza
+      banner.innerHTML = `<span class="dot"></span> Bozza non salvata`;
+      actions.appendChild(banner);
+    }
+  
+    if (anyDirty) {
+      // Se NON stiamo salvando, forza testo “Bozza non salvata”
+      if (!banner.classList.contains('saving')) {
+        banner.classList.remove('saved');
+        banner.innerHTML = `<span class="dot"></span> Bozza non salvata`;
+      }
+      banner.style.display = 'inline-flex';
+    } else {
+      // Nessuna modifica → nascondi (verrà poi gestito da endSaving quando serve)
+      banner.style.display = 'none';
+    }
+  
+    // Dirty dot sulle tab
+    const tabsRoot = $(SEL.tabsRoot);
+    if (tabsRoot) {
+      const panels = $$('.tab-panels .panel', tabsRoot);
+      const labels = $$('.tab-nav label', tabsRoot);
+      labels.forEach((lab, i) => {
+        const panel = panels[i];
+        if (!panel) return;
+        const dirtyInTab = $$('.settings-row.dirty', panel).length > 0;
+        lab.classList.toggle('tab-dirty', dirtyInTab);
+      });
+    }
   };
+  
 
   // ---- NUOVO: tracciamo i valori originali e i reset-button per controllo
   const originals = new WeakMap();   // control -> originalValue
@@ -6344,6 +6372,7 @@ function initDirtyTracker() {
       });
       saveBtn.dataset.saveHooked = '1';
     }
+
   }
 
   function beginSaving() {
