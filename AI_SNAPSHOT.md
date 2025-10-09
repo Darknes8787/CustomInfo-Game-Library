@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T20:23:01.825140Z_
+_Generated: 2025-10-09T20:26:01.820189Z_
 
 ## Table of contents
 
@@ -5179,10 +5179,10 @@ function loadTheme(){
 }
 
 /* ==========================
-   SETTINGS (binding live unificato)
+   SETTINGS (no-live, solo salvataggio manuale)
 ========================== */
 
-// Mappa centralizzata: idControllo -> { path, type, toUI?, fromUI? }
+// Mappa controlli -> path config
 const SETTINGS_MAP = {
   // LIBRERIA
   'default-lib':     { path: 'library.default_folder',   type: 'string' },
@@ -5201,7 +5201,7 @@ const SETTINGS_MAP = {
     fromUI: v => (v || 'dark')
   },
 
-  // ESCLUSIONI (textarea con “;”)
+  // ESCLUSIONI (textarea “;”)
   'dir-exclude':     { path: 'exclude.dir_keywords',     type: 'array',
     toUI:  arr => (Array.isArray(arr) ? arr.join('; ') : ''),
     fromUI: str => sanitizeList(str)
@@ -5220,7 +5220,7 @@ const SETTINGS_MAP = {
   'alias-file':      { path: 'metadata.aliases_path',    type: 'string' },
 };
 
-// Normalizza le liste “a; b; c”
+// Helpers
 function sanitizeList(input, opts = {}) {
   const { lower=false, ensureDot=false } = opts;
   const out = (input || '')
@@ -5229,17 +5229,11 @@ function sanitizeList(input, opts = {}) {
     .filter(Boolean)
     .map(s => {
       let v = lower ? s.toLowerCase() : s;
-      if (ensureDot) {
-        // aggiungi il punto iniziale se manca (per estensioni)
-        if (!v.startsWith('.')) v = '.' + v;
-      }
+      if (ensureDot && !v.startsWith('.')) v = '.' + v;
       return v;
     });
-  // dedup preservando ordine
   return Array.from(new Set(out));
 }
-
-// Helpers di conversione
 function coerceToType(value, type) {
   switch (type) {
     case 'boolean': return !!value;
@@ -5249,31 +5243,31 @@ function coerceToType(value, type) {
   }
 }
 
+// Carica user.json e popola i controlli (UI only, NESSUN salvataggio)
 async function loadSettingsIntoUI() {
   try {
     await waitForPyAPI(1200);
     const api = py();
-    if (!api?.get_settings) return; // in browser
-    const s = await api.get_settings(); // user.json completo
+    if (!api?.get_settings) return; // in modalità browser, niente pywebview
 
-    // Popola i controlli
+    const s = await api.get_settings(); // legge user.json (via backend) :contentReference[oaicite:4]{index=4}
+
     Object.entries(SETTINGS_MAP).forEach(([id, meta]) => {
       const el = document.getElementById(id);
       if (!el) return;
 
-      // estrai valore da s usando path a punti
+      // path a punti → valore
       const parts = meta.path.split('.');
       let cur = s;
       for (const p of parts) cur = (cur && typeof cur === 'object') ? cur[p] : undefined;
 
-      // type-safe + trasformazione toUI
       const v = meta.toUI ? meta.toUI(cur) : coerceToType(cur, meta.type);
 
       if (el.type === 'checkbox') el.checked = !!v;
       else el.value = (v ?? '');
     });
 
-    // Applica anche il tema
+    // applica tema UI
     const themeSel = document.getElementById('theme');
     const themeVal = themeSel?.value || 'dark';
     applyTheme(themeVal);
@@ -5283,87 +5277,70 @@ async function loadSettingsIntoUI() {
   }
 }
 
-function bindLiveSaves() {
-  Object.entries(SETTINGS_MAP).forEach(([id, meta]) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-
-    const handler = async () => {
-      const api = py();
-      if (!api?.set_setting) return;
-
-      let uiVal;
-      if (el.type === 'checkbox') uiVal = el.checked;
-      else uiVal = el.value;
-
-      // trasformazione fromUI (per textarea, ecc.)
-      if (meta.fromUI) {
-        uiVal = meta.fromUI(uiVal);
-      } else {
-        // coerce leggero ai tipi base (number/bool/string)
-        uiVal = coerceToType(uiVal, meta.type);
-      }
-
-      try {
-        await api.set_setting(meta.path, uiVal);
-
-        // >>> segnala al dirty-tracker che questo controllo è "salvato"
-        document.dispatchEvent(new CustomEvent('settings:saved', { detail: { control: el } }));
-              
-        // feedback minimale nel footer (evito spam)
-        // setStatus('Impostazioni aggiornate'); // opzionale
-      } catch (e) {
-        console.error('set_setting failed', meta.path, e);
-        setStatus('Errore salvataggio impostazioni');
-      }
-
-      // caso speciale: tema → applica subito
-      if (meta.path === 'ui.theme') {
-        applyTheme(uiVal || 'dark');
-      }
-    };
-
-    el.addEventListener('change', handler);
-    // per input testuali/textarea puoi voler salvare anche su 'input'
-    if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
-      el.addEventListener('blur', handler); // salva quando esci dal campo
-    }
-  });
-}
-
-// Pulsante “Ripristina default” → copia defaults.json su user.json
+// Ripristina defaults → ricarica UI
 $('#restore')?.addEventListener('click', async () => {
   try {
     if (py()?.restore_defaults) {
-      await py().restore_defaults();
-      await loadSettingsIntoUI(); // ripopola i campi
-      applyTheme('dark');         // default tema
+      await py().restore_defaults();         // copia defaults → user.json :contentReference[oaicite:5]{index=5}
+      await loadSettingsIntoUI();            // ripopola i campi
+      // opzionale: riallinea baseline dirty se disponibile
+      if (window.SettingsDirty?.commitAllBaselines) {
+        window.SettingsDirty.commitAllBaselines($('#view-settings'));
+      }
     }
+    applyTheme('dark');
     setStatus('Impostazioni ripristinate');
-    // Banner UX già gestito in ui-utils.js (beginSaving/endSaving se vuoi)
   } catch {
     setStatus('Errore nel ripristino delle impostazioni');
   }
 });
 
-// Pulsante “Salva” (rimane come conferma manuale opzionale)
+// SALVA (batch): legge tutti i controlli e fa set_setting(...) per ciascun path
 $('#save')?.addEventListener('click', async () => {
   try {
-    // Forziamo almeno il tema (gli altri sono già live)
-    const theme = $('#theme')?.value || 'dark';
-    applyTheme(theme);
-    if (py()?.set_setting) await py().set_setting('ui.theme', theme);
+    await waitForPyAPI(1500);
+    const api = py();
+    if (!api?.set_setting) { setStatus('Salvataggio non disponibile'); return; }
+
+    // 1) raccogli i valori UI → payloads {path, value}
+    const ops = [];
+    for (const [id, meta] of Object.entries(SETTINGS_MAP)) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      let uiVal = (el.type === 'checkbox') ? el.checked : el.value;
+      uiVal = meta.fromUI ? meta.fromUI(uiVal) : coerceToType(uiVal, meta.type);
+      ops.push({ path: meta.path, value: uiVal });
+    }
+
+    // 2) applica tema subito (UX)
+    const themeOp = ops.find(o => o.path === 'ui.theme');
+    if (themeOp) applyTheme(themeOp.value || 'dark');
+
+    // 3) salva sequenzialmente (più semplice per log/errori)
+    for (const op of ops) {
+      await api.set_setting(op.path, op.value);  // wrapper → store.set_setting() :contentReference[oaicite:6]{index=6}
+    }
+
+    // 4) chiudi stato “salvataggio in corso” e resetta dirty
+    if (window.SettingsDirty?.commitAllBaselines) {
+      window.SettingsDirty.commitAllBaselines($('#view-settings'));
+    }
+    // chiude banner e messaggistica
+    if (typeof endSaving === 'function') endSaving();
     setStatus('Impostazioni salvate');
-  } catch {
+  } catch (e) {
+    console.error(e);
     setStatus('Errore salvataggio');
+    // se vuoi, qui potresti lasciare il banner “in corso” finché non riprovi
   }
 });
 
-// Bootstrap settings
+// all’avvio: applica tema da localStorage e carica config in UI
 document.addEventListener('DOMContentLoaded', async () => {
+  loadTheme();
   await loadSettingsIntoUI();
-  bindLiveSaves();
 });
+
 
 
 /* ==========================
@@ -6350,8 +6327,7 @@ function initDirtyTracker() {
     if (saveBtn && !saveBtn.dataset.saveHooked) {
       saveBtn.addEventListener('click', () => {
         beginSaving();
-        // demo: termina dopo 1.2s. Integra qui la tua logica reale e poi chiama endSaving().
-        setTimeout(endSaving, 1200);
+        // niente endSaving qui: verrà chiamato da app.js quando tutte le set_setting sono completate
       });
       saveBtn.dataset.saveHooked = '1';
     }
@@ -6684,17 +6660,17 @@ if __name__ == "__main__":
 {
   "library": {
     "folders": [],
-    "default_folder": "C:\\Ciruzzo",
-    "scan_on_startup": true,
-    "max_depth": 23,
+    "default_folder": "",
+    "scan_on_startup": false,
+    "max_depth": 3,
     "dedupe_titles": true
   },
   "scan": {
-    "show_progress": false
+    "show_progress": true
   },
   "logs": {
     "keep_last": 10,
-    "auto_save_after_scan": true
+    "auto_save_after_scan": false
   },
   "exclude": {
     "dir_keywords": [],
@@ -6702,7 +6678,7 @@ if __name__ == "__main__":
     "extensions": []
   },
   "paths": {
-    "sevenzip": "7z"
+    "sevenzip": ""
   },
   "metadata": {
     "aliases_path": ""
