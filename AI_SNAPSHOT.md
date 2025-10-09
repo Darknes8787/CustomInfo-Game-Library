@@ -1,6 +1,6 @@
 # AI Snapshot
 
-_Generated: 2025-10-09T21:08:01.819508Z_
+_Generated: 2025-10-09T21:11:01.814840Z_
 
 ## Table of contents
 
@@ -3638,6 +3638,23 @@ box-shadow:0 0 12px rgba(111, 77, 239, 0.25), inset 0 0 4px rgba(111, 77, 239, 0
     0 0 0 1px color-mix(in srgb, var(--accent) var(--mk-ring), transparent),
     0 0 8px -2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
+
+
+
+
+
+
+
+
+
+/* opzionale: stesso stile della vecchia draft-info */
+.settings-actions .save-info {
+  display: none;
+  align-items: center;
+  gap: .5rem;
+}
+
+/* già usi .loader-dot per l’animazione puntini */
 
 ```
 
